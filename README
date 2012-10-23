@@ -1,0 +1,5 @@
+Ofifo
+Mac OS X application launcher written in Python.
+
+Requires:
+* Pyglet
