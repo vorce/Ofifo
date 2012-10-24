@@ -87,22 +87,25 @@ class TextWidget(object):
 
 class TextButton(object):
     def __init__(self, text, path, x, y, width, batch):
+        self.path_text = path
         self.document = pyglet.text.document.UnformattedDocument(text)
         self.document.set_style(0, len(self.document.text),
                                 dict(color=(0, 0, 0, 255), font_size=20)
                                )
         font = self.document.get_font()
-        height = font.ascent - font.descent
-
+        self.height = font.ascent - font.descent
+        self.batch = batch
         self.layout = pyglet.text.layout.IncrementalTextLayout(
-            self.document, width, height, multiline=False, batch=batch)
+            self.document, width, self.height, multiline=False, batch=self.batch)
 
         self.layout.x = x
         self.layout.y = y
 
-        pad = 5
-        self.rectangle = Rectangle(x - pad, y - pad,
-                                   x + width + pad, y + height + pad, batch)
+        self.pad = 5
+        self.width = width
+        self.rectangle = Rectangle(x - self.pad, y - self.pad,
+                                   x + self.width + self.pad,
+                                   y + self.height + self.pad, self.batch)
 
     def hit_test(self, x, y):
         return (0 < x - self.layout.x < self.layout.width and
@@ -112,11 +115,22 @@ class TextButton(object):
         self.layout.delete()
         self.rectangle.delete()
 
+    def move_to(self, x, y):
+        self.layout.x = x
+        self.layout.y = y
+        self.rectangle.delete()
+        self.rectangle = Rectangle(x - self.pad, y - self.pad,
+                                   x + self.width + self.pad,
+                                   y + self.height + self.pad, self.batch)
+
 
 class Window(pyglet.window.Window):
     def __init__(self, *args, **kwargs):
-        super(Window, self).__init__(600, 80, caption='OfifO')
+        super(Window, self).__init__(600, 80, caption='OfifO',
+                                     style=pyglet.window.Window.WINDOW_STYLE_BORDERLESS)
+        self.need_reshuffle = False
         self.set_maximum_size(600, 450)
+        self.button_list = []
 
         self.batch = pyglet.graphics.Batch()
         #self.labels = [
@@ -147,7 +161,8 @@ class Window(pyglet.window.Window):
         self.set_focus(self.widgets[0])
         self.reader = spotlightreader.SpotlightQuery.alloc().init()
         self.reader.query_handler = ResultHandler.alloc().init()
-        self.reader.query_handler.set_progress_func(self.search_progress)
+        #self.reader.query_handler.set_progress_func(self.search_progress)
+        self.reader.query_handler.set_finished_func(self.search_progress)
         #spotlightreader.SpotlightNotificationHandler.alloc().init()
         self.inited_search = False
 
@@ -160,6 +175,14 @@ class Window(pyglet.window.Window):
             widget.rectangle.delete()
             widget.rectangle = Rectangle(10, height - 70, width - 10,
                                          (height - 70) + 60, self.batch)
+
+        #if self.need_reshuffle:
+        #    y_pos = (self.height - 165)
+        #    for key in self.search_matches:
+        #        (n, widget) = self.search_matches[key]
+        #        y_pos += 50
+        #        widget.move_to(15, y_pos)
+        #    need_reshuffle = False
 
     def on_draw(self):
         pyglet.gl.glClearColor(0.9, 0.9, 0.9, 1)
@@ -236,25 +259,64 @@ class Window(pyglet.window.Window):
             self.focus.caret.on_text_motion_select(motion)
 
     def search_progress(self, results):
-        for key in self.search_matches:
-            (name, widget) = self.search_matches[key]
-            if widget:
-                widget.delete()
-                self.set_size(600, self.height - 50)
-        self.search_matches = {}
+        to_remove = []
+        limited_results = results[:min(len(results), 10)]
+        result_keys = [i.valueForAttribute_("kMDItemPath") for i in
+                       limited_results]
+        resize_height = 0
 
-        for i in results[:min(len(results), 10)]:
+        """
+        print("-------- search progress ----------")
+        print("result keys: {0}".format(result_keys))
+
+        for key in self.search_matches:
+            if key not in result_keys:
+                (name, widget) = self.search_matches[key]
+                to_remove.append(key)
+                if widget:
+                    widget.delete()
+                    resize_height -= 50
+                    self.need_reshuffle = True
+                    print("removed {0}: {1}".format(key, resize_height))
+                    #self.height -= 50
+                    #self.set_size(600, self.height - 50)
+
+        for key in to_remove:
+            self.search_matches.pop(key)
+        """
+        self.search_matches.clear()
+        if self.button_list:
+            for i in self.button_list:
+                i.delete()
+        self.button_list = []
+        self.height = 80
+
+        for i in limited_results:
             disp_name = i.valueForAttribute_("kMDItemDisplayName")
 
-            #decode('UTF-8')
             path = i.valueForAttribute_("kMDItemPath")
 
-            if not path in self.search_matches:
-                self.set_size(600, self.height + 50)
-                btn = TextButton(disp_name, path, 15,
-                                 self.height - 115, self.width - 30,
-                                 self.batch)
-                self.search_matches[path] = (disp_name, btn)
+            if path not in self.search_matches:
+                #self.set_size(600, self.height + 50)
+                resize_height += 50
+                print("added {0}: {1}".format(path, resize_height))
+                #self.height += 50
+                #btn = TextButton(disp_name, path, 15,
+                #                 (self.height - 115) + resize_height, self.width - 30,
+                #                 self.batch)
+                self.search_matches[path] = (disp_name, "koko")
+        print("rearch_matches: {0}".format(self.search_matches))
+
+        resize_height = 0
+        for key in self.search_matches:
+            resize_height += 50
+            (name, w) = self.search_matches[key]
+            btn = TextButton(name, path, 15,
+                             (self.height - 115) + resize_height, self.width - 30,
+                             self.batch)
+            self.button_list.append(btn)
+        #if resize_height != 0:
+        self.set_size(600, self.height + resize_height)
 
     def on_key_press(self, symbol, modifiers):
         """if symbol == pyglet.window.key.TAB:
