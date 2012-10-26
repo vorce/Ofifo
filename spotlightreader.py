@@ -1,8 +1,10 @@
+# -*- coding: utf-8 -*-
 """
 """
 import sys
 from Cocoa import *
 from PyObjCTools import AppHelper
+
 
 class SpotlightNotificationHandler(NSObject):
     def awakeFromNib(self):
@@ -15,11 +17,16 @@ class SpotlightNotificationHandler(NSObject):
     def notificationHandler_(self, note):
         if note.name() == NSMetadataQueryDidFinishGatheringNotification:
             print("All done niggah")
-            sys.exit(0)
+        elif note.name() == NSMetadataQueryGatheringProgressNotification:
+            print("Da Progress event...")
+
+    def dealloc(self):
+        NSNotificationCenter.defaultCenter().removeObserver_(self)
+
 
 class SpotlightQuery(NSObject):
     query = objc.ivar()
-    nf = None
+    query_handler = None
 
     def awakeFromNib(self):
         pass
@@ -28,31 +35,31 @@ class SpotlightQuery(NSObject):
         self = super(SpotlightQuery, self).init()
         return self
 
-    def new_search(self, pred, search_scopes=None, query_handler=None):
+    def new_search(self, pred, search_scopes=None):
         self.query = NSMetadataQuery.alloc().init()
 
-        self.nf = NSNotificationCenter.defaultCenter()
+        nf = NSNotificationCenter.defaultCenter()
 
-        if query_handler == None:
-            self.nf.addObserver_selector_name_object_(self, 'queryNotification:',
-                                                      None, self.query)
+        if self.query_handler is None:
+            nf.addObserver_selector_name_object_(self, 'queryNotification:',
+                                                 None, self.query)
         else:
-            self.nf.addObserver_selector_name_object_(query_handler,
-                                                      'notificationHandler:',
-                                                      None, self.query)
+            nf.addObserver_selector_name_object_(self.query_handler,
+                                                 'notificationHandler:',
+                                                 None, self.query)
 
-        if search_scopes != None:
-            print("Setting search paths to: {0}".format(search_scopes))
+        if search_scopes is not None:
+            #print("Setting search paths to: {0}".format(search_scopes))
             self.query.setSearchScopes_(search_scopes)
 
         if self.query.isStarted or self.query.isGathering:
             self.query.stopQuery()
-            print("Stopping already running query")
+            #print("Stopping already running query")
 
         self.query.setPredicate_(pred)
 
         if (not self.query.isStarted) or self.query.isStopped:
-            print("Starting new query with pred: {0}".format(pred))
+            #print("Starting new query with pred: {0}".format(pred))
             self.query.startQuery()
 
     def queryNotification_(self, note):
@@ -64,11 +71,12 @@ class SpotlightQuery(NSObject):
             print("Search: Finished gathering. Found {0} matches".format(
                 len(result)))
             for i in result:
-                print("{0} ({1})".format(i.valueForAttribute_("kMDItemDisplayName"),
-                                         i.valueForAttribute_("kMDItemPath")))
+                print("{0} ({1})".format(
+                          i.valueForAttribute_("kMDItemDisplayName").encode('utf-8'),
+                          i.valueForAttribute_("kMDItemPath").encode('utf-8')))
             print("-------------")
-            AppHelper.stopEventLoop()
-            sys.exit(0)
+            #AppHelper.stopEventLoop()
+            #sys.exit(0)
         elif note.name() == NSMetadataQueryGatheringProgressNotification:
             print("Search: Progress event...")
         elif note.name() == NSMetadataQueryDidUpdateNotification:
