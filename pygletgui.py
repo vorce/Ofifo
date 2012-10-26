@@ -5,6 +5,7 @@ import pyglet
 import Cocoa
 import spotlightreader
 
+
 class ResultHandler(Cocoa.NSObject):
     finished_func = None
     progress_func = None
@@ -41,6 +42,8 @@ class ResultHandler(Cocoa.NSObject):
 """
 Taken from http://www.pyglet.org/doc/programming_guide/text_input.py
 """
+
+
 class Rectangle(object):
     '''Draws a rectangle into a batch.'''
     def __init__(self, x1, y1, x2, y2, batch):
@@ -103,6 +106,7 @@ class TextButton(object):
 
         self.pad = 5
         self.width = width
+        self.selected = False
         self.rectangle = Rectangle(x - self.pad, y - self.pad,
                                    x + self.width + self.pad,
                                    y + self.height + self.pad, self.batch)
@@ -115,36 +119,28 @@ class TextButton(object):
         self.layout.delete()
         self.rectangle.delete()
 
-    def move_to(self, x, y):
-        self.layout.x = x
-        self.layout.y = y
-        self.rectangle.delete()
-        self.rectangle = Rectangle(x - self.pad, y - self.pad,
-                                   x + self.width + self.pad,
-                                   y + self.height + self.pad, self.batch)
+    def select(self, selected):
+        self.selected = selected
+
+        if self.selected:
+            self.document.set_style(0, len(self.document.text),
+                                    dict(color=(250, 250, 250, 255)))
+        else:
+            self.document.set_style(0, len(self.document.text),
+                                    dict(color=(0, 0, 0, 255)))
 
 
 class Window(pyglet.window.Window):
     def __init__(self, *args, **kwargs):
         super(Window, self).__init__(600, 80, caption='OfifO',
                                      style=pyglet.window.Window.WINDOW_STYLE_BORDERLESS)
-        self.need_reshuffle = False
         self.set_maximum_size(600, 450)
-        self.button_list = []
 
         self.batch = pyglet.graphics.Batch()
-        #self.labels = [
-            #pyglet.text.Label('Name', x=10, y=100, anchor_y='bottom',
-            #                  color=(0, 0, 0, 255), batch=self.batch),
-            #pyglet.text.Label('Species', x=10, y=60, anchor_y='bottom',
-            #                  color=(0, 0, 0, 255), batch=self.batch),
-            #pyglet.text.Label('Special abilities', x=10, y=20,
-            #                  anchor_y='bottom', color=(0, 0, 0, 255),
-            #                  batch=self.batch)
-        #]
-
-        self.search_matches = {}
-        self.predicate = "((kMDItemDisplayName LIKE[cd] '*{0}*') OR (kMDItemFSName LIKE[cd] '*{0}*')) AND (kMDItemContentType == 'com.apple.application-bundle')"
+        self.search_matches = []
+        self.predicate = "((kMDItemDisplayName LIKE[cd] '*{0}*') " + \
+                         "OR (kMDItemFSName LIKE[cd] '*{0}*')) " + \
+                         "AND (kMDItemContentType == 'com.apple.application-bundle')"
         self.search_paths = ["/Applications", "/Developers/Applications",
                              "/Library/PreferencePanes",
                              "/System/Library/PreferencePanes",
@@ -152,37 +148,25 @@ class Window(pyglet.window.Window):
 
         self.widgets = [
             TextWidget('', 20, 20, self.width - 40, self.batch),
-            #TextWidget('', 200, 60, self.width - 210, self.batch),
-            #TextWidget('', 200, 20, self.width - 210, self.batch)
         ]
         self.text_cursor = self.get_system_mouse_cursor('text')
 
         self.focus = None
+        self.focus_index = 0
         self.set_focus(self.widgets[0])
         self.reader = spotlightreader.SpotlightQuery.alloc().init()
         self.reader.query_handler = ResultHandler.alloc().init()
         #self.reader.query_handler.set_progress_func(self.search_progress)
-        self.reader.query_handler.set_finished_func(self.search_progress)
-        #spotlightreader.SpotlightNotificationHandler.alloc().init()
+        self.reader.query_handler.set_finished_func(self.search_finished)
         self.inited_search = False
 
     def on_resize(self, width, height):
         super(Window, self).on_resize(width, height)
         for widget in self.widgets:
-            #widget.layout.y = widget.layout.y - 50
-            #widget.width = width - 110
             widget.layout.y = height - 60
             widget.rectangle.delete()
             widget.rectangle = Rectangle(10, height - 70, width - 10,
                                          (height - 70) + 60, self.batch)
-
-        #if self.need_reshuffle:
-        #    y_pos = (self.height - 165)
-        #    for key in self.search_matches:
-        #        (n, widget) = self.search_matches[key]
-        #        y_pos += 50
-        #        widget.move_to(15, y_pos)
-        #    need_reshuffle = False
 
     def on_draw(self):
         pyglet.gl.glClearColor(0.9, 0.9, 0.9, 1)
@@ -190,26 +174,13 @@ class Window(pyglet.window.Window):
         self.batch.draw()
 
     def on_mouse_motion(self, x, y, dx, dy):
-        for widget in self.widgets:
-            if widget.hit_test(x, y):
-                self.set_mouse_cursor(self.text_cursor)
-                break
-        else:
-            self.set_mouse_cursor(None)
+        pass
 
     def on_mouse_press(self, x, y, button, modifiers):
-        for widget in self.widgets:
+        for (path, name, widget) in self.search_matches:
             if widget.hit_test(x, y):
-                self.set_focus(widget)
-                break
-        else:
-            self.set_focus(None)
-
-        for key in self.search_matches:
-            (name, widget) = self.search_matches[key]
-            if widget.hit_test(x, y):
-                print("Launch {0}: {1}".format(name, key))
-                self.launch_app(key)
+                print("Launch {0}: {1}".format(name, path))
+                self.launch_app(path)
 
         if self.focus:
             self.focus.caret.on_mouse_press(x, y, button, modifiers)
@@ -223,8 +194,7 @@ class Window(pyglet.window.Window):
             self.focus.caret.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
 
     def on_text(self, text):
-        if self.focus:
-            self.focus.caret.on_text(text)
+        self.widgets[0].caret.on_text(text)
 
         if text in string.whitespace:
             return
@@ -247,8 +217,7 @@ class Window(pyglet.window.Window):
             self.inited_search = True
 
     def on_text_motion(self, motion):
-        if self.focus:
-            self.focus.caret.on_text_motion(motion)
+        self.widgets[0].caret.on_text_motion(motion)
 
         if motion in [pyglet.window.key.MOTION_BACKSPACE,
                       pyglet.window.key.MOTION_DELETE]:
@@ -258,37 +227,14 @@ class Window(pyglet.window.Window):
         if self.focus:
             self.focus.caret.on_text_motion_select(motion)
 
-    def search_progress(self, results):
-        to_remove = []
+    def search_finished(self, results):
         limited_results = results[:min(len(results), 10)]
-        result_keys = [i.valueForAttribute_("kMDItemPath") for i in
-                       limited_results]
         resize_height = 0
 
-        """
-        print("-------- search progress ----------")
-        print("result keys: {0}".format(result_keys))
+        for (path, name, widget) in self.search_matches:
+            widget.delete()
 
-        for key in self.search_matches:
-            if key not in result_keys:
-                (name, widget) = self.search_matches[key]
-                to_remove.append(key)
-                if widget:
-                    widget.delete()
-                    resize_height -= 50
-                    self.need_reshuffle = True
-                    print("removed {0}: {1}".format(key, resize_height))
-                    #self.height -= 50
-                    #self.set_size(600, self.height - 50)
-
-        for key in to_remove:
-            self.search_matches.pop(key)
-        """
-        self.search_matches.clear()
-        if self.button_list:
-            for i in self.button_list:
-                i.delete()
-        self.button_list = []
+        self.search_matches = []
         self.height = 80
 
         for i in limited_results:
@@ -297,61 +243,48 @@ class Window(pyglet.window.Window):
             path = i.valueForAttribute_("kMDItemPath")
 
             if path not in self.search_matches:
-                #self.set_size(600, self.height + 50)
                 resize_height += 50
-                print("added {0}: {1}".format(path, resize_height))
-                #self.height += 50
-                #btn = TextButton(disp_name, path, 15,
-                #                 (self.height - 115) + resize_height, self.width - 30,
-                #                 self.batch)
-                self.search_matches[path] = (disp_name, "koko")
-        print("rearch_matches: {0}".format(self.search_matches))
+                self.search_matches.append((path, disp_name,
+                                            TextButton(disp_name, path, 15,
+                                                (self.height - 115) + resize_height,
+                                                self.width - 30, self.batch)))
 
-        resize_height = 0
-        for key in self.search_matches:
-            resize_height += 50
-            (name, w) = self.search_matches[key]
-            btn = TextButton(name, path, 15,
-                             (self.height - 115) + resize_height, self.width - 30,
-                             self.batch)
-            self.button_list.append(btn)
-        #if resize_height != 0:
+        if(len(limited_results) > 0):
+            self.focus_index = len(self.search_matches) - 1
+            self.set_focus(self.search_matches[self.focus_index][2])
         self.set_size(600, self.height + resize_height)
 
     def on_key_press(self, symbol, modifiers):
-        """if symbol == pyglet.window.key.TAB:
-            if modifiers & pyglet.window.key.MOD_SHIFT:
-                dir = -1
-            else:
-                dir = 1
-
-            if self.focus in self.widgets:
-                i = self.widgets.index(self.focus)
-            else:
-                i = 0
-                dir = 0
-
-            self.set_focus(self.widgets[(i + dir) % len(self.widgets)])
-        """
-
-        if symbol == pyglet.window.key.ENTER:
-            #self.set_size(600, self.height + 50)
-            #TextButton('abc', 15, self.height - 110, self.width - 30,
-            #            self.batch)
-            #Rectangle(20, 100,
-            #          500, 50, self.batch)
-            pass
+        if symbol == pyglet.window.key.DOWN and len(self.search_matches) > 0:
+            self.focus_index -= 1
+            self.set_focus(self.search_matches[self.focus_index %
+                                               len(self.search_matches)][2])
+        elif symbol == pyglet.window.key.UP and len(self.search_matches) > 0:
+            self.focus_index += 1
+            self.set_focus(self.search_matches[self.focus_index %
+                                               len(self.search_matches)][2])
+        elif symbol == pyglet.window.key.ENTER:
+            if self.focus and len(self.search_matches) > 0:
+                self.launch_app(self.search_matches[self.focus_index][0])
 
         elif symbol == pyglet.window.key.ESCAPE:
             pyglet.app.exit()
 
     def set_focus(self, focus):
         if self.focus:
-            self.focus.caret.visible = False
-            self.focus.caret.mark = self.focus.caret.position = 0
+            try:
+                self.focus.select(False)
+            except AttributeError:
+                pass
 
         self.focus = focus
         if self.focus:
-            self.focus.caret.visible = True
-            self.focus.caret.mark = 0
-            self.focus.caret.position = len(self.focus.document.text)
+            try:
+                self.focus.caret.visible = True
+                self.focus.caret.mark = 0
+                self.focus.caret.position = len(self.focus.document.text)
+            except AttributeError:
+                try:
+                    self.focus.select(True)
+                except AttributeError:
+                    pass
