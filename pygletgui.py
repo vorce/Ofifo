@@ -197,16 +197,15 @@ class Window(pyglet.window.Window):
                 print("Launch {0}: {1}".format(name, path))
                 self.launch_app(path)
 
-        if self.focus:
-            self.focus.caret.on_mouse_press(x, y, button, modifiers)
+        if self.widgets[0].hit_test(x, y):
+            self.widgets[0].caret.on_mouse_press(x, y, button, modifiers)
 
     def launch_app(self, path):
         subprocess.call(["open", path])
         pyglet.app.exit()
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        if self.focus:
-            self.focus.caret.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
+        pass
 
     def on_text(self, text):
         self.widgets[0].caret.on_text(text)
