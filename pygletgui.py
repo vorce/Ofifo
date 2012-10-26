@@ -60,9 +60,10 @@ class TextWidget(object):
     def __init__(self, text, x, y, width, batch):
         self.document = pyglet.text.document.UnformattedDocument(text)
         self.document.set_style(0, len(self.document.text),
-            dict(color=(0, 0, 0, 255), font_size=30)
+            dict(color=(0, 0, 0, 255), font_size=28)
         )
         font = self.document.get_font()
+
         height = font.ascent - font.descent
 
         self.layout = pyglet.text.layout.IncrementalTextLayout(
@@ -97,12 +98,25 @@ class TextButton(object):
                                )
         font = self.document.get_font()
         self.height = font.ascent - font.descent
+
+        self.path_doc = pyglet.text.document.UnformattedDocument(path)
+        self.path_doc.set_style(0, len(self.path_doc.text),
+                                dict(color=(100, 100, 100, 255), font_size=8))
+
+        font = self.path_doc.get_font()
+        path_height = font.ascent - font.descent
+
         self.batch = batch
+        self.l2 = pyglet.text.layout.TextLayout(self.path_doc, width,
+                                                path_height, batch=self.batch)
         self.layout = pyglet.text.layout.IncrementalTextLayout(
             self.document, width, self.height, multiline=False, batch=self.batch)
 
         self.layout.x = x
         self.layout.y = y
+        self.l2.x = x
+        self.l2.y = y - path_height - 5
+        #self.height -= path_height
 
         self.pad = 5
         self.width = width
@@ -117,6 +131,7 @@ class TextButton(object):
 
     def delete(self):
         self.layout.delete()
+        self.l2.delete()
         self.rectangle.delete()
 
     def select(self, selected):
@@ -228,6 +243,7 @@ class Window(pyglet.window.Window):
             self.focus.caret.on_text_motion_select(motion)
 
     def search_finished(self, results):
+        ypad = 60
         limited_results = results[:min(len(results), 10)]
         resize_height = 0
 
@@ -243,7 +259,7 @@ class Window(pyglet.window.Window):
             path = i.valueForAttribute_("kMDItemPath")
 
             if path not in self.search_matches:
-                resize_height += 50
+                resize_height += ypad
                 self.search_matches.append((path, disp_name,
                                             TextButton(disp_name, path, 15,
                                                 (self.height - 115) + resize_height,
