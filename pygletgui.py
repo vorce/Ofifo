@@ -161,14 +161,12 @@ class Window(pyglet.window.Window):
                              "/System/Library/PreferencePanes",
                              "/Users/joel"]
 
-        self.widgets = [
-            TextWidget('', 20, 20, self.width - 40, self.batch),
-        ]
+        self.inp_widget = TextWidget('', 20, 20, self.width - 40, self.batch)
         self.text_cursor = self.get_system_mouse_cursor('text')
 
         self.focus = None
         self.focus_index = 0
-        self.set_focus(self.widgets[0])
+        self.set_focus(self.inp_widget)
         self.reader = spotlightreader.SpotlightQuery.alloc().init()
         self.reader.query_handler = ResultHandler.alloc().init()
         #self.reader.query_handler.set_progress_func(self.search_progress)
@@ -177,11 +175,10 @@ class Window(pyglet.window.Window):
 
     def on_resize(self, width, height):
         super(Window, self).on_resize(width, height)
-        for widget in self.widgets:
-            widget.layout.y = height - 60
-            widget.rectangle.delete()
-            widget.rectangle = Rectangle(10, height - 70, width - 10,
-                                         (height - 70) + 60, self.batch)
+        self.inp_widget.layout.y = height - 60
+        self.inp_widget.rectangle.delete()
+        self.inp_widget.rectangle = Rectangle(10, height - 70, width - 10,
+                                              (height - 70) + 60, self.batch)
 
     def on_draw(self):
         pyglet.gl.glClearColor(0.9, 0.9, 0.9, 1)
@@ -197,8 +194,8 @@ class Window(pyglet.window.Window):
                 print("Launch {0}: {1}".format(name, path))
                 self.launch_app(path)
 
-        if self.widgets[0].hit_test(x, y):
-            self.widgets[0].caret.on_mouse_press(x, y, button, modifiers)
+        if self.inp_widget.hit_test(x, y):
+            self.inp_widget.caret.on_mouse_press(x, y, button, modifiers)
 
     def launch_app(self, path):
         subprocess.call(["open", path])
@@ -208,12 +205,12 @@ class Window(pyglet.window.Window):
         pass
 
     def on_text(self, text):
-        self.widgets[0].caret.on_text(text)
+        self.inp_widget.caret.on_text(text)
 
         if text in string.whitespace:
             return
 
-        val = self.widgets[0].document.text
+        val = self.inp_widget.document.text
         self.do_search(val)
 
     def do_search(self, word):
@@ -231,11 +228,11 @@ class Window(pyglet.window.Window):
             self.inited_search = True
 
     def on_text_motion(self, motion):
-        self.widgets[0].caret.on_text_motion(motion)
+        self.inp_widget.caret.on_text_motion(motion)
 
         if motion in [pyglet.window.key.MOTION_BACKSPACE,
                       pyglet.window.key.MOTION_DELETE]:
-            self.do_search(self.widgets[0].document.text)
+            self.do_search(self.inp_widget.document.text)
 
     def on_text_motion_select(self, motion):
         if self.focus:
