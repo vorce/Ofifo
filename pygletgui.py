@@ -4,6 +4,7 @@ import subprocess
 import pyglet
 import Cocoa
 import spotlightreader
+import resultaction
 
 
 class ResultHandler(Cocoa.NSObject):
@@ -90,16 +91,16 @@ class TextWidget(object):
 
 
 class TextButton(object):
-    def __init__(self, text, path, x, y, width, batch):
-        self.path_text = path
-        self.document = pyglet.text.document.UnformattedDocument(text)
+    def __init__(self, result_action, x, y, width, batch):
+        self.path_text = result_action.arg
+        self.document = pyglet.text.document.UnformattedDocument(result_action.name)
         self.document.set_style(0, len(self.document.text),
                                 dict(color=(0, 0, 0, 255), font_size=20)
                                )
         font = self.document.get_font()
         self.height = font.ascent - font.descent
 
-        self.path_doc = pyglet.text.document.UnformattedDocument(path)
+        self.path_doc = pyglet.text.document.UnformattedDocument(self.path_text)
         self.path_doc.set_style(0, len(self.path_doc.text),
                                 dict(color=(100, 100, 100, 255), font_size=8))
 
@@ -253,13 +254,15 @@ class Window(pyglet.window.Window):
             disp_name = i.valueForAttribute_("kMDItemDisplayName")
 
             path = i.valueForAttribute_("kMDItemPath")
+            content = i.valueForAttribute_("kMDItemContentType")
 
             if path not in self.search_matches:
                 resize_height += ypad
-                self.search_matches.append((path, disp_name,
-                                            TextButton(disp_name, path, 15,
-                                                (self.height - 115) + resize_height,
-                                                self.width - 30, self.batch)))
+                act = resultaction.ResultAction(content, disp_name, path)
+                btn = TextButton(act, 15,
+                                 (self.height - 115) + resize_height,
+                                 self.width - 30, self.batch)
+                self.search_matches.append((path, disp_name, btn))
 
         if(len(limited_results) > 0):
             self.focus_index = len(self.search_matches) - 1
